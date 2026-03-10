@@ -144,7 +144,7 @@ This will:
 
 1. Read `X_train.xlsx` and `X_test.xlsx`.
 2. Train a **CART decision tree** with `max_depth=10`.
-3. Train a **Random Forest** with `n_trees=50`, `max_depth=5`, random subspace per tree.
+3. Train a **Random Forest** with `n_trees=50`, `max_depth=3`, random subspace per tree.
 4. Print metrics in this format:
 
 ```text
