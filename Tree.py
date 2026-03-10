@@ -110,7 +110,7 @@ class Tree:
 
     # ---- Plotting methods ----
 
-    def plot(self, feature_names=None, figsize=(12, 8)):
+    def plot(self, feature_names=None, figsize=None):
         """Visualize the decision tree using matplotlib."""
         if self.root is None:
             raise ValueError("Tree has not been fitted yet.")
@@ -122,24 +122,32 @@ class Tree:
                 "matplotlib is required for plotting. Install it with 'python -m pip install matplotlib'."
             ) from exc
 
-        fig, ax = plt.subplots(figsize=figsize)
-        ax.axis("off")
-
         total_leaves = max(self._count_leaves(self.root), 1)
         max_depth = max(self._tree_depth(self.root), 1)
 
-        self._plot_node(
+        # Scale figure size based on tree complexity
+        if figsize is None:
+            width = max(14, total_leaves * 3.5)
+            height = max(8, max_depth * 3)
+            figsize = (width, height)
+
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.axis("off")
+
+        # Assign x positions to leaves first, then derive parent positions
+        leaf_positions = {}
+        self._assign_leaf_x(self.root, leaf_positions, counter=[0], total_leaves=total_leaves)
+
+        self._plot_tree(
             node=self.root,
             ax=ax,
-            x=0.5,
             y=0.95,
-            x_span=0.45,
             y_step=0.85 / max_depth,
             feature_names=feature_names,
-            total_leaves=total_leaves,
+            leaf_positions=leaf_positions,
         )
 
-        plt.subplots_adjust(left=0.02, right=0.98, top=0.98, bottom=0.02)
+        plt.subplots_adjust(left=0.01, right=0.99, top=0.98, bottom=0.02)
         plt.show()
 
     def _count_leaves(self, node):
@@ -177,54 +185,71 @@ class Tree:
             return f"{feature_label}\nin {{{cats_str}}}"
         return f"{feature_label} <= {node.threshold:.3f}"
 
-    def _plot_node(self, node, ax, x, y, x_span, y_step, feature_names, total_leaves):
+    def _assign_leaf_x(self, node, positions, counter, total_leaves):
         """
-        Recursively draw nodes and edges.
-        Horizontal positions are proportional to leaf counts to avoid overlap.
+        Assign evenly spaced x positions to leaf nodes (left to right).
+        Internal nodes will be centered between their children later.
         """
+        if node.is_leaf_node():
+            margin = 0.05
+            spacing = (1.0 - 2 * margin) / max(total_leaves - 1, 1)
+            positions[id(node)] = margin + counter[0] * spacing
+            counter[0] += 1
+            return
+
+        self._assign_leaf_x(node.left, positions, counter, total_leaves)
+        self._assign_leaf_x(node.right, positions, counter, total_leaves)
+        # Internal node x = midpoint of its children's x range
+        positions[id(node)] = (self._subtree_min_x(node, positions)
+                               + self._subtree_max_x(node, positions)) / 2
+
+    def _subtree_min_x(self, node, positions):
+        """Get the leftmost x position in this subtree."""
+        if node.is_leaf_node():
+            return positions[id(node)]
+        return self._subtree_min_x(node.left, positions)
+
+    def _subtree_max_x(self, node, positions):
+        """Get the rightmost x position in this subtree."""
+        if node.is_leaf_node():
+            return positions[id(node)]
+        return self._subtree_max_x(node.right, positions)
+
+    def _plot_tree(self, node, ax, y, y_step, feature_names, leaf_positions):
+        """
+        Recursively draw nodes and edges using precomputed leaf positions.
+        This avoids overlap by spacing leaves evenly and centering parents.
+        """
+        x = leaf_positions[id(node)]
         label = self._node_label(node, feature_names)
+
+        fontsize = 8
         box_style = {
             "boxstyle": "round,pad=0.4",
             "fc": "#e8f0fe" if not node.is_leaf_node() else "#e6f4ea",
             "ec": "#4a4a4a",
         }
-        ax.text(x, y, label, ha="center", va="center", bbox=box_style)
+        ax.text(x, y, label, ha="center", va="center",
+                fontsize=fontsize, bbox=box_style)
 
         if node.is_leaf_node():
             return
 
-        # Position children proportionally to their leaf counts
-        left_leaves = self._count_leaves(node.left)
-        right_leaves = self._count_leaves(node.right)
-        span_unit = x_span / total_leaves
-
-        left_x = x - (right_leaves * span_unit)
-        right_x = x + (left_leaves * span_unit)
         child_y = y - y_step
+        left_x = leaf_positions[id(node.left)]
+        right_x = leaf_positions[id(node.right)]
 
         # Draw edges to children
-        ax.annotate(
-            "",
-            xy=(left_x, child_y + 0.03),
-            xytext=(x, y - 0.03),
-            arrowprops={"arrowstyle": "-", "lw": 1.5},
-        )
-        ax.annotate(
-            "",
-            xy=(right_x, child_y + 0.03),
-            xytext=(x, y - 0.03),
-            arrowprops={"arrowstyle": "-", "lw": 1.5},
-        )
+        ax.annotate("", xy=(left_x, child_y + 0.02), xytext=(x, y - 0.02),
+                     arrowprops={"arrowstyle": "-", "lw": 1.2, "color": "#666"})
+        ax.annotate("", xy=(right_x, child_y + 0.02), xytext=(x, y - 0.02),
+                     arrowprops={"arrowstyle": "-", "lw": 1.2, "color": "#666"})
 
-        # Edge labels: True (left), False (right)
-        ax.text((x + left_x) / 2, (y + child_y) / 2, "True", ha="center", va="center")
-        ax.text((x + right_x) / 2, (y + child_y) / 2, "False", ha="center", va="center")
+        # Edge labels
+        ax.text((x + left_x) / 2 - 0.01, (y + child_y) / 2, "True",
+                ha="center", va="center", fontsize=7, color="#2e7d32")
+        ax.text((x + right_x) / 2 + 0.01, (y + child_y) / 2, "False",
+                ha="center", va="center", fontsize=7, color="#c62828")
 
-        self._plot_node(
-            node.left, ax, left_x, child_y,
-            x_span / 2, y_step, feature_names, total_leaves,
-        )
-        self._plot_node(
-            node.right, ax, right_x, child_y,
-            x_span / 2, y_step, feature_names, total_leaves,
-        )
+        self._plot_tree(node.left, ax, child_y, y_step, feature_names, leaf_positions)
+        self._plot_tree(node.right, ax, child_y, y_step, feature_names, leaf_positions)

@@ -22,7 +22,7 @@ y_test = test_df.iloc[:, -1].values
 feature_names = train_df.columns[:-1].tolist()
 
 # --- Train decision tree ---
-tree = Tree(max_depth=3)
+tree = Tree(max_depth=10)
 tree.fit(X_train, y_train)
 
 train_preds = tree.predict(X_train)
@@ -97,7 +97,7 @@ print()
 print("RANDOM FOREST")
 from randomforest import RandomForest
 
-rf = RandomForest(n_trees=50, max_depth=5, max_features="sqrt", random_state=42)
+rf = RandomForest(n_trees=50, max_depth=5, random_state=42)
 rf.fit(X_train, y_train)
 rf_test_preds = rf.predict(X_test)
 
